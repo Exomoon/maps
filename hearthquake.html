@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Weekly Earthquakes</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: #585858;
+            font-family: 'Arial', sans-serif;
+        }
+        #map {
+            flex-grow: 1;
+            width: 99vw;
+            
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0px 1px 10px rgba(0, 0, 0, 0.2);
+            position: relative;
+        }
+        .title {
+            text-align: center;
+            font-size: 2.5rem;
+            color: #333;
+            margin-bottom: 1rem;
+            font-family: Arial, sans-serif;
+            font-weight: 300;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+}
+#legend {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
+    padding: 10px;
+    background: rgba(255,255,255,0.8);
+    border-radius: 3px;
+    box-shadow: 0px 1px 2px rgba(0, 0, 0, 0.1);
+    font-family: Arial, sans-serif;
+}
+
+#legend h3 {
+    margin: 0 0 10px;
+    color: #333;
+    font-size: 1.2rem;
+}
+
+#legend p {
+    margin: 0 0 5px;
+    color: #333;
+    font-size: 1rem;
+}
+
+.legend-item {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-right: 5px;
+    vertical-align: middle;
+}
+
+        #date-slider {
+        width: 80%;
+        margin: 1rem auto;
+        padding: 10px;
+        background: #e4e4e41c;
+        border-radius: 3px;
+        box-shadow: 0px 1px 2px rgba(0, 0, 0, 0.1);
+        border-color: #ffffff69;
+        border-width: 1px;
+        border-style: dashed; /* You can also use other styles like 'dotted', 'dashed', etc. */
+    }
+
+        .leaflet-top.leaflet-right {
+            right: 50%;
+            transform: translateX(50%);
+        }
+    </style>
+</head>
+<body>
+    <h1 class="title">Weekly Earthquakes</h1>
+    <div id="map">
+        <div id="legend">
+            <h3>Earthquakes in Magnitude</h3>
+            <p><span class="legend-item" style="background: #FFFF00;"></span>1.0-2.5 (Low)</p>
+            <p><span class="legend-item" style="background: #FFA500;"></span>2.5-5.0 (Medium)</p>
+            <p><span class="legend-item" style="background: #FF0000;"></span>5.0+ (High)</p>
+        </div>
+    </div>
+    <div id="date-slider">
+        <h3>Time Slider</h3> <!-- This is the title -->
+        <p>Date: <span id="date"></span></p>
+        <div id="slider"></div>
+    </div>
+    <script>
+        var map = L.map('map').setView([47.606209, -122.332071], 2);
+        var cartoDarkLayer = L.tileLayer('https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors, © CARTO',
+            minZoom: 2,
+            maxZoom: 19
+        }).addTo(map);
+
+        var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            id: 'osm-dark',
+            tileSize: 512,
+            zoomOffset: -1
+        });
+
+        var baseMaps = {
+            "Carto Dark": cartoDarkLayer,
+            "OpenStreetMap": osmLayer
+        };
+
+        cartoDarkLayer.addTo(map);
+
+        L.control.layers(baseMaps).addTo(map);
+
+        fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson')
+            .then(response => response.json())
+            .then(data => {
+                var heatArray = [];
+                var markers = [];
+                data.features.forEach(feature => {
+                    let coords = feature.geometry.coordinates;
+                    let magnitude = feature.properties.mag;
+                    let place = feature.properties.place;
+                    let timestamp = new Date(feature.properties.time);
+                    let dateString = timestamp.toISOString().split('T')[0];
+                    let timeString = timestamp.toISOString().split('T')[1].split('.')[0];
+                    let color = magnitude < 2.5 ? '#FFFF00' :
+                                magnitude < 5.0 ? '#FFA500' :
+                                '#FF0000';
+                    var marker = L.circleMarker([coords[1], coords[0]], {
+                        radius: magnitude,
+                        color: color,
+                        fillOpacity: 0.5
+                    }).bindPopup(`Magnitude: ${magnitude}<br>Location: ${place}<br>Time: ${dateString} ${timeString}`);
+                    marker.addTo(map);
+                    markers.push(marker);
+                    heatArray.push([coords[1], coords[0]]);
+                });
+                L.heatLayer(heatArray, {radius: 25}).addTo(map);
+
+                var timestamps = data.features.map(feature => new Date(feature.properties.time).getTime());
+                var minTimestamp = Math.min(...timestamps);
+                var maxTimestamp = Math.max(...timestamps);
+
+                $("#date").text(moment(minTimestamp).format('YYYY-MM-DD') + ' - ' + moment(maxTimestamp).format('YYYY-MM-DD'));
+
+                $("#slider").slider({
+                    range: true,
+                    min: minTimestamp,
+                    max: maxTimestamp,
+                    values: [minTimestamp, maxTimestamp],
+                    slide: function(event, ui) {
+                        var startDate = moment(ui.values[0]).format('YYYY-MM-DD');
+                        var endDate = moment(ui.values[1]).format('YYYY-MM-DD');
+                        $("#date").text(startDate + ' - ' + endDate);
+                        markers.forEach(marker => {
+                            var timestamp = marker.getPopup().getContent().match(/Time: (\d{4}-\d{2}-\d{2})/)[1];
+                            var markerTimestamp = moment(timestamp).valueOf();
+                            if (markerTimestamp >= ui.values[0] && markerTimestamp <= ui.values[1]) {
+                                marker.addTo(map);
+                            } else {
+                                marker.removeFrom(map);
+                            }
+                        });
+                    }
+                });
+            });
+            
+    </script>
+</body>
+</html>
